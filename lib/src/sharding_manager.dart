@@ -118,7 +118,7 @@ class ShardingManager {
         lastIndex = shardIds.length;
       }
 
-      Process spawned = await processData.spawn(shardIds.sublist(totalSpawned, lastIndex));
+      Process spawned = await processData.spawn(shardIds.sublist(totalSpawned, lastIndex), _totalShards!);
 
       if (options.redirectOutput) {
         spawned.stdout.transform(utf8.decoder).forEach(print);
