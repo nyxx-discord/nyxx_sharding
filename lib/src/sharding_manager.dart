@@ -154,7 +154,9 @@ class ShardingManager {
 
       processes.add(spawned);
 
-      await Future.delayed(individualConnectionDelay * (lastIndex - totalSpawned));
+      if (lastIndex != shardIds.length) {
+        await Future.delayed(individualConnectionDelay * (lastIndex - totalSpawned));
+      }
     }
 
     _logger.info('Successfully started ${processes.length} processes, totalling $_totalShards shards');
