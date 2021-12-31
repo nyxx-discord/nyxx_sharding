@@ -15,7 +15,7 @@ ClientOptions getOptions([ClientOptions? defaultOptions]) {
 
 int get totalShards {
   if (Platform.environment.containsKey('NYXX_SHARDING_TOTAL_SHARDS')) {
-    return int.fromEnvironment('NYXX_SHARDING_TOTAL_SHARDS');
+    return int.parse(Platform.environment['NYXX_SHARDING_TOTAL_SHARDS']!);
   }
   throw ShardingError('Missing NYXX_SHARDING_TOTAL_SHARDS variable');
 }
