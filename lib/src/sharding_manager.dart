@@ -121,8 +121,8 @@ class ShardingManager {
       Process spawned = await processData.spawn(shardIds.sublist(totalSpawned, lastIndex), _totalShards!);
 
       if (options.redirectOutput) {
-        spawned.stdout.transform(utf8.decoder).forEach(print);
-        spawned.stderr.transform(utf8.decoder).forEach(print);
+        spawned.stdout.transform(utf8.decoder).forEach(stdout.write);
+        spawned.stderr.transform(utf8.decoder).forEach(stderr.write);
       }
 
       processes.add(spawned);
