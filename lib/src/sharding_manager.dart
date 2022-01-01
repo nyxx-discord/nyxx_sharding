@@ -108,8 +108,35 @@ class ShardingManager {
     return recommended;
   }
 
+  Future<int> _getMaxConcurrency() async {
+    if (token == null) {
+      return 1;
+    }
+
+    INyxx client = NyxxFactory.createNyxxRest(token!, GatewayIntents.none, Snowflake.zero());
+
+    await client.connect();
+
+    IHttpResponse gatewayBot = await (client.httpEndpoints as HttpEndpoints).getGatewayBot();
+
+    if (gatewayBot is IHttpResponseError) {
+      throw ShardingError('Cannot connect to Discord to get max connection concurrency: [$gatewayBot]');
+    }
+
+    await client.dispose();
+
+    int maxConcurrency = (gatewayBot as IHttpResponseSucess).jsonBody['session_start_limit']['max_concurrency'] as int;
+
+    _logger.info('Got max concurrency: $maxConcurrency');
+
+    return maxConcurrency;
+  }
+
   Future<void> _startProcesses() async {
     List<int> shardIds = List.generate(_totalShards!, (id) => id);
+
+    int maxConcurrency = await _getMaxConcurrency();
+    Duration individualConnectionDelay = Duration(milliseconds: (5 * 1000) ~/ maxConcurrency + 1000);
 
     for (int totalSpawned = 0; totalSpawned < _totalShards!; totalSpawned += _shardsPerProcess!) {
       int lastIndex = totalSpawned + _shardsPerProcess!;
@@ -126,6 +153,10 @@ class ShardingManager {
       }
 
       processes.add(spawned);
+
+      if (lastIndex != shardIds.length) {
+        await Future.delayed(individualConnectionDelay * (lastIndex - totalSpawned));
+      }
     }
 
     _logger.info('Successfully started ${processes.length} processes, totalling $_totalShards shards');
