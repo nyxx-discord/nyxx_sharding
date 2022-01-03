@@ -9,21 +9,41 @@ import 'package:nyxx_sharding/src/exceptions.dart';
 import 'package:nyxx_sharding/src/process_data/process_data.dart';
 import 'package:nyxx_sharding/src/sharding_options.dart';
 
+/// Spawns and contains processes running individual instances of the bot.
+///
+/// The total number of shards, total number of processes and number of shards per process can be manually set, or automatically calculated if [token] is
+/// provided. [token] can also be set in conjunction with either [shardsPerProcess] or [numProcesses] for more control.
 abstract class IShardingManager {
+  /// The [ProcessData] that will be used to spawn the child processes.
   ProcessData get processData;
 
+  /// The number of shards to spawn in each process.
   int? get shardsPerProcess;
+
+  /// The total number of processes to spawn.
   int? get numProcesses;
+
+  /// The total number of shards to spawn across all processes.
   int? get totalShards;
 
+  /// A Discord bot token used to automatically determine the maximum IDENTIFY concurrency for the bot. If [totalShards] is not provided, [token] will also be
+  /// used to get the total shard count.
+  ///
+  /// If [token] is not set, the maximum concurrency will default to `1`, and either [totalShards] or [numProcesses] and [shardsPerProcess] must be provided.
   String? get token;
 
+  /// The options for this [IShardingManager].
   ShardingOptions get options;
 
+  /// The processes spawned by this [IShardingManager].
+  ///
+  /// This list will be empty until the [Future] returned by [start] completes.
   List<Process> get processes;
 
+  /// Start all the child processes. This is a lengthy operation.
   Future<void> start();
 
+  /// Create a new [IShardingManager]
   factory IShardingManager.create(
     ProcessData processData, {
     int? shardsPerProcess,

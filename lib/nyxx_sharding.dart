@@ -1,3 +1,6 @@
+/// A utility library for implementing external sharding with [nyxx](https://pub.dev/packages/nyxx), or alternatively with any Discord bot framework.
+///
+/// Automatically splits shards across multiple processes that will be automatically spawned.
 library nyxx_sharding;
 
 export 'src/client_utils.dart' show shardIds, totalShards, getOptions;
