@@ -9,23 +9,56 @@ import 'package:nyxx_sharding/src/exceptions.dart';
 import 'package:nyxx_sharding/src/process_data/process_data.dart';
 import 'package:nyxx_sharding/src/sharding_options.dart';
 
-class ShardingManager {
+abstract class IShardingManager {
+  ProcessData get processData;
+
+  int? get shardsPerProcess;
+  int? get numProcesses;
+  int? get totalShards;
+
+  String? get token;
+
+  ShardingOptions get options;
+
+  List<Process> get processes;
+
+  Future<void> start();
+
+  factory IShardingManager.create(
+    ProcessData processData, {
+    int? shardsPerProcess,
+    int? numProcesses,
+    int? totalShards,
+    String? token,
+    ShardingOptions options = const ShardingOptions(),
+  }) =>
+      ShardingManager(processData, shardsPerProcess: shardsPerProcess, numProcesses: numProcesses, totalShards: totalShards, token: token, options: options);
+}
+
+class ShardingManager implements IShardingManager {
+  @override
   final ProcessData processData;
 
+  @override
   int? get shardsPerProcess => _shardsPerProcess;
+  @override
   int? get numProcesses => _numProcesses;
+  @override
   int? get totalShards => _totalShards;
 
   int? _shardsPerProcess;
   int? _numProcesses;
   int? _totalShards;
 
+  @override
   final String? token;
 
   final Logger _logger = Logger('Sharding');
 
+  @override
   final ShardingOptions options;
 
+  @override
   final List<Process> processes = [];
 
   ShardingManager(
@@ -61,6 +94,7 @@ class ShardingManager {
     }
   }
 
+  @override
   Future<void> start() async {
     await _computeShardAndProcessCounts();
 
