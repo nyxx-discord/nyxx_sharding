@@ -227,14 +227,13 @@ class ShardingManager implements IShardingManager {
     spawnedProcess.exitCode.then((code) {
       processes.remove(spawnedProcess);
 
-      void Function(String) log;
-      if (code == 0) {
-        log = _logger.info;
-      } else {
-        log = _logger.warning;
-      }
+      String message = 'Process ${spawnedProcess.pid} exited with exit code $code';
 
-      log('Process ${spawnedProcess.pid} exited with exit code $code');
+      if (code == 0) {
+        _logger.info(message);
+      } else {
+        _logger.warning(message);
+      }
 
       if (code != 0 && !_exiting && options.respawnProcesses) {
         _logger.info('Respawning process with shard IDs $shardIds');
