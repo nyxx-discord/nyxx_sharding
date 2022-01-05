@@ -215,17 +215,17 @@ class ShardingManager implements IShardingManager {
   }
 
   Future<Process> _spawn(List<int> shardIds) async {
-    Process spawned = await processData.spawn(shardIds, _totalShards!);
+    final spawnedProcess = await processData.spawn(shardIds, _totalShards!);
 
     if (options.redirectOutput) {
-      spawned.stdout.transform(utf8.decoder).forEach(stdout.write);
-      spawned.stderr.transform(utf8.decoder).forEach(stderr.write);
+      spawnedProcess.stdout.transform(utf8.decoder).forEach(stdout.write);
+      spawnedProcess.stderr.transform(utf8.decoder).forEach(stderr.write);
     }
 
-    processes.add(spawned);
+    processes.add(spawnedProcess);
 
-    spawned.exitCode.then((code) {
-      processes.remove(spawned);
+    spawnedProcess.exitCode.then((code) {
+      processes.remove(spawnedProcess);
 
       void Function(String) log;
       if (code == 0) {
@@ -234,7 +234,7 @@ class ShardingManager implements IShardingManager {
         log = _logger.warning;
       }
 
-      log('Process ${spawned.pid} exited with exit code $code');
+      log('Process ${spawnedProcess.pid} exited with exit code $code');
 
       if (code != 0 && !_exiting && options.respawnProcesses) {
         _logger.info('Respawning process with shard IDs $shardIds');
@@ -243,7 +243,7 @@ class ShardingManager implements IShardingManager {
       }
     });
 
-    return spawned;
+    return spawnedProcess;
   }
 
   @override
