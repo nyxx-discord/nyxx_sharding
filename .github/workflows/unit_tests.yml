@@ -85,8 +85,8 @@ jobs:
       - name: Install dependencies
         run: dart pub get
 
-      - name: Unit tests
-        run: dart run test --coverage="coverage" test/unit/**
+      - name: Integration tests
+        run: dart run test --coverage="coverage" test/integration/**
 
       - name: Format coverage
         run: dart run coverage:format_coverage --lcov --in=coverage --out=coverage/coverage.lcov --packages=.packages --report-on=lib
