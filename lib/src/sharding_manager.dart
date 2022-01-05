@@ -43,6 +43,9 @@ abstract class IShardingManager {
   /// Start all the child processes. This is a lengthy operation.
   Future<void> start();
 
+  /// Kills all child processes.
+  Future<void> kill();
+
   /// Create a new [IShardingManager]
   factory IShardingManager.create(
     ProcessData processData, {
@@ -208,11 +211,20 @@ class ShardingManager implements IShardingManager {
 
       processes.add(spawned);
 
+      spawned.exitCode.then((_) => processes.remove(spawned));
+
       if (lastIndex != shardIds.length) {
         await Future.delayed(individualConnectionDelay * (lastIndex - totalSpawned));
       }
     }
 
     _logger.info('Successfully started ${processes.length} processes, totalling $_totalShards shards');
+  }
+
+  @override
+  Future<void> kill() async {
+    for (final process in processes) {
+      process.kill();
+    }
   }
 }
