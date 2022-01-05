@@ -7,7 +7,11 @@ class ShardingOptions {
   /// Default `true`.
   final bool redirectOutput;
 
+  final bool respawnProcesses;
+
+  /// Whether to respawn processes upon exiting if the exit code is non-zero.
   const ShardingOptions({
     this.redirectOutput = true,
+    this.respawnProcesses = true,
   });
 }

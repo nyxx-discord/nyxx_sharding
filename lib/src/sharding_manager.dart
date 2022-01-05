@@ -84,6 +84,8 @@ class ShardingManager implements IShardingManager {
   @override
   final List<Process> processes = [];
 
+  bool _exiting = false;
+
   ShardingManager(
     this.processData, {
     int? shardsPerProcess,
@@ -202,16 +204,7 @@ class ShardingManager implements IShardingManager {
         lastIndex = shardIds.length;
       }
 
-      Process spawned = await processData.spawn(shardIds.sublist(totalSpawned, lastIndex), _totalShards!);
-
-      if (options.redirectOutput) {
-        spawned.stdout.transform(utf8.decoder).forEach(stdout.write);
-        spawned.stderr.transform(utf8.decoder).forEach(stderr.write);
-      }
-
-      processes.add(spawned);
-
-      spawned.exitCode.then((_) => processes.remove(spawned));
+      await _spawn(shardIds.sublist(totalSpawned, lastIndex));
 
       if (lastIndex != shardIds.length) {
         await Future.delayed(individualConnectionDelay * (lastIndex - totalSpawned));
@@ -221,8 +214,41 @@ class ShardingManager implements IShardingManager {
     _logger.info('Successfully started ${processes.length} processes, totalling $_totalShards shards');
   }
 
+  Future<Process> _spawn(List<int> shardIds) async {
+    Process spawned = await processData.spawn(shardIds, _totalShards!);
+
+    if (options.redirectOutput) {
+      spawned.stdout.transform(utf8.decoder).forEach(stdout.write);
+      spawned.stderr.transform(utf8.decoder).forEach(stderr.write);
+    }
+
+    processes.add(spawned);
+
+    spawned.exitCode.then((code) {
+      processes.remove(spawned);
+
+      void Function(String) log;
+      if (code == 0) {
+        log = _logger.info;
+      } else {
+        log = _logger.warning;
+      }
+
+      log('Process ${spawned.pid} exited with exit code $code');
+
+      if (code != 0 && !_exiting && options.respawnProcesses) {
+        _logger.info('Respawning process with shard IDs $shardIds');
+
+        _spawn(shardIds);
+      }
+    });
+
+    return spawned;
+  }
+
   @override
   Future<void> kill() async {
+    _exiting = true;
     for (final process in processes) {
       process.kill();
     }
