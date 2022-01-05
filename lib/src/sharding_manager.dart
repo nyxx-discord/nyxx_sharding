@@ -189,8 +189,13 @@ class ShardingManager implements IShardingManager {
   Future<void> _startProcesses() async {
     List<int> shardIds = List.generate(_totalShards!, (id) => id);
 
-    int maxConcurrency = await _getMaxConcurrency();
-    Duration individualConnectionDelay = Duration(milliseconds: (5 * 1000) ~/ maxConcurrency + 1000);
+    Duration individualConnectionDelay;
+    if (options.timeoutSpawn) {
+      int maxConcurrency = await _getMaxConcurrency();
+      individualConnectionDelay = Duration(milliseconds: (5 * 1000) ~/ maxConcurrency + 1000);
+    } else {
+      individualConnectionDelay = Duration.zero;
+    }
 
     for (int totalSpawned = 0; totalSpawned < _totalShards!; totalSpawned += _shardsPerProcess!) {
       int lastIndex = totalSpawned + _shardsPerProcess!;
