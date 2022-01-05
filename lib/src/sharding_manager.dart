@@ -131,16 +131,16 @@ class ShardingManager implements IShardingManager {
   }
 
   Future<void> _computeShardAndProcessCounts() async {
+    if ((_totalShards == null || _numProcesses == null) && _shardsPerProcess == null) {
+      _shardsPerProcess = 5; // TODO determine best default
+    }
+
     if (_totalShards == null) {
       if (_shardsPerProcess != null && _numProcesses != null) {
         _totalShards = _numProcesses! * _shardsPerProcess!;
-      } else {
+      } else if (token != null) {
         _totalShards = await _getRecomendedShards(token!);
       }
-    }
-
-    if (_numProcesses == null && _shardsPerProcess == null) {
-      _shardsPerProcess = 5; // TODO determine best default
     }
 
     _numProcesses ??= (_totalShards! / _shardsPerProcess!).ceil();
@@ -194,8 +194,13 @@ class ShardingManager implements IShardingManager {
   Future<void> _startProcesses() async {
     List<int> shardIds = List.generate(_totalShards!, (id) => id);
 
-    int maxConcurrency = await _getMaxConcurrency();
-    Duration individualConnectionDelay = Duration(milliseconds: (5 * 1000) ~/ maxConcurrency + 1000);
+    Duration individualConnectionDelay;
+    if (options.timeoutSpawn) {
+      int maxConcurrency = await _getMaxConcurrency();
+      individualConnectionDelay = Duration(milliseconds: (5 * 1000) ~/ maxConcurrency + 1000);
+    } else {
+      individualConnectionDelay = Duration.zero;
+    }
 
     for (int totalSpawned = 0; totalSpawned < _totalShards!; totalSpawned += _shardsPerProcess!) {
       int lastIndex = totalSpawned + _shardsPerProcess!;
