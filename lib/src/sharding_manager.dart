@@ -43,6 +43,9 @@ abstract class IShardingManager {
   /// Start all the child processes. This is a lengthy operation.
   Future<void> start();
 
+  /// Kills all child processes.
+  Future<void> kill();
+
   /// Create a new [IShardingManager]
   factory IShardingManager.create(
     ProcessData processData, {
@@ -80,6 +83,8 @@ class ShardingManager implements IShardingManager {
 
   @override
   final List<Process> processes = [];
+
+  bool _exiting = false;
 
   ShardingManager(
     this.processData, {
@@ -204,14 +209,7 @@ class ShardingManager implements IShardingManager {
         lastIndex = shardIds.length;
       }
 
-      Process spawned = await processData.spawn(shardIds.sublist(totalSpawned, lastIndex), _totalShards!);
-
-      if (options.redirectOutput) {
-        spawned.stdout.transform(utf8.decoder).forEach(stdout.write);
-        spawned.stderr.transform(utf8.decoder).forEach(stderr.write);
-      }
-
-      processes.add(spawned);
+      await _spawn(shardIds.sublist(totalSpawned, lastIndex));
 
       if (lastIndex != shardIds.length) {
         await Future.delayed(individualConnectionDelay * (lastIndex - totalSpawned));
@@ -219,5 +217,44 @@ class ShardingManager implements IShardingManager {
     }
 
     _logger.info('Successfully started ${processes.length} processes, totalling $_totalShards shards');
+  }
+
+  Future<Process> _spawn(List<int> shardIds) async {
+    final spawnedProcess = await processData.spawn(shardIds, _totalShards!);
+
+    if (options.redirectOutput) {
+      spawnedProcess.stdout.transform(utf8.decoder).forEach(stdout.write);
+      spawnedProcess.stderr.transform(utf8.decoder).forEach(stderr.write);
+    }
+
+    processes.add(spawnedProcess);
+
+    spawnedProcess.exitCode.then((code) {
+      processes.remove(spawnedProcess);
+
+      String message = 'Process ${spawnedProcess.pid} exited with exit code $code';
+
+      if (code == 0) {
+        _logger.info(message);
+      } else {
+        _logger.warning(message);
+      }
+
+      if (code != 0 && !_exiting && options.respawnProcesses) {
+        _logger.info('Respawning process with shard IDs $shardIds');
+
+        _spawn(shardIds);
+      }
+    });
+
+    return spawnedProcess;
+  }
+
+  @override
+  Future<void> kill() async {
+    _exiting = true;
+    for (final process in processes) {
+      process.kill();
+    }
   }
 }
