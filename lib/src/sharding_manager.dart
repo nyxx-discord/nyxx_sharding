@@ -126,16 +126,16 @@ class ShardingManager implements IShardingManager {
   }
 
   Future<void> _computeShardAndProcessCounts() async {
+    if ((_totalShards == null || _numProcesses == null) && _shardsPerProcess == null) {
+      _shardsPerProcess = 5; // TODO determine best default
+    }
+
     if (_totalShards == null) {
       if (_shardsPerProcess != null && _numProcesses != null) {
         _totalShards = _numProcesses! * _shardsPerProcess!;
-      } else {
+      } else if (token != null) {
         _totalShards = await _getRecomendedShards(token!);
       }
-    }
-
-    if (_numProcesses == null && _shardsPerProcess == null) {
-      _shardsPerProcess = 5; // TODO determine best default
     }
 
     _numProcesses ??= (_totalShards! / _shardsPerProcess!).ceil();
