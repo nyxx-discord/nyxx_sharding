@@ -104,7 +104,7 @@ void main() {
 
       await manager.start();
 
-      expect(manager.totalShards, equals(5));
+      expect(manager.numProcesses, equals(5));
     });
   });
 
