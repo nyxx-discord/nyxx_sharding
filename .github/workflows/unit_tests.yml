@@ -85,9 +85,6 @@ jobs:
       - name: Install dependencies
         run: dart pub get
 
-      - name: Unit tests
-        run: dart run test --coverage="coverage" test/unit/**
-
       - name: Integration tests
         run: dart run test --coverage="coverage" test/integration/**
 

@@ -7,7 +7,13 @@ class ShardingOptions {
   /// Default `true`.
   final bool redirectOutput;
 
+  /// Whether to wait after spawning a process for enough time for all shards to initialise before spawning the next process.
+  ///
+  /// Generally you will not want to disable this; this option should be used for testing only.
+  final bool timeoutSpawn;
+
   const ShardingOptions({
     this.redirectOutput = true,
+    this.timeoutSpawn = true,
   });
 }
