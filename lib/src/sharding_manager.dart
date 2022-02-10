@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:logging/logging.dart';
 import 'package:nyxx/nyxx.dart';
@@ -44,7 +45,9 @@ abstract class IShardingManager {
   Future<void> start();
 
   /// Kills all child processes.
-  Future<void> kill();
+  ///
+  /// [signal] will be sent to all processes.
+  Future<void> kill([ProcessSignal signal = ProcessSignal.sigterm]);
 
   /// Create a new [IShardingManager]
   factory IShardingManager.create(
@@ -125,6 +128,14 @@ class ShardingManager implements IShardingManager {
 
     if ((_totalShards! / _shardsPerProcess!).ceil() < _numProcesses!) {
       _logger.info('Number of processes is larger than needed; less processes will be spawned');
+    }
+
+    for (final signal in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
+      signal.watch().listen((event) async {
+        await kill(event);
+
+        Isolate.current.kill();
+      });
     }
 
     await _startProcesses();
@@ -251,10 +262,10 @@ class ShardingManager implements IShardingManager {
   }
 
   @override
-  Future<void> kill() async {
+  Future<void> kill([ProcessSignal signal = ProcessSignal.sigterm]) async {
     _exiting = true;
     for (final process in processes) {
-      process.kill();
+      process.kill(signal);
     }
   }
 }
