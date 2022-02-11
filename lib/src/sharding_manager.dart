@@ -216,8 +216,7 @@ class ShardingManager implements IShardingManager {
     }
 
     if (_shardsPerProcess != null && _shardsPerProcess! < 1) {
-      throw ShardingError(
-          'Invalid shard per process count specified: total shards per process cannot be less than 1');
+      throw ShardingError('Invalid shard per process count specified: total shards per process cannot be less than 1');
     }
 
     if (_maxGuildsPerProcess != null && _maxGuildsPerProcess! < 1) {
@@ -254,8 +253,7 @@ class ShardingManager implements IShardingManager {
   }
 
   Future<void> _computeShardAndProcessCounts() async {
-    if ([totalShards, numProcesses, shardsPerProcess].where((element) => element != null).length >=
-        2) {
+    if ([totalShards, numProcesses, shardsPerProcess].where((element) => element != null).length >= 2) {
       if (totalShards != null && numProcesses != null && shardsPerProcess != null) {
         if (totalShards != numProcesses! * shardsPerProcess!) {
           throw ShardingError(
@@ -272,27 +270,23 @@ class ShardingManager implements IShardingManager {
 
       if (maxGuildsPerProcess != null || maxGuildsPerShard != null) {
         if (token == null) {
-          _logger.warning(
-              'No token to fetch guild count to validate maximum guilds per shard and per process');
+          _logger.warning('No token to fetch guild count to validate maximum guilds per shard and per process');
           return;
         }
 
         int guildCount = await _getGuildCount();
 
         if (maxGuildsPerProcess != null && guildCount / numProcesses! > maxGuildsPerProcess!) {
-          _logger.warning(
-              'Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
+          _logger.warning('Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
         }
 
         if (maxGuildsPerShard != null && guildCount / totalShards! > maxGuildsPerShard!) {
-          _logger.warning(
-              'Current setup causes guilds per shard (${guildCount / totalShards!}) to be larger than maximum ($maxGuildsPerShard)');
+          _logger.warning('Current setup causes guilds per shard (${guildCount / totalShards!}) to be larger than maximum ($maxGuildsPerShard)');
         }
       }
     } else {
       if (token == null) {
-        throw ShardingError(
-            'A token must be proivided if less than two of total shards, shards per process or process count are provided');
+        throw ShardingError('A token must be proivided if less than two of total shards, shards per process or process count are provided');
       }
 
       if (shardsPerProcess != null) {
@@ -304,8 +298,7 @@ class ShardingManager implements IShardingManager {
             _numProcesses = (totalShards! / shardsPerProcess!).ceil();
 
             if (maxGuildsPerProcess != null && guildCount / numProcesses! > maxGuildsPerProcess!) {
-              _logger.warning(
-                  'Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
+              _logger.warning('Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
             }
           } else if (maxGuildsPerProcess != null) {
             _numProcesses = (guildCount / maxGuildsPerProcess!).ceil();
@@ -327,8 +320,7 @@ class ShardingManager implements IShardingManager {
         }
 
         if (maxGuildsPerProcess != null && guildCount / numProcesses! > maxGuildsPerProcess!) {
-          _logger.warning(
-              'Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
+          _logger.warning('Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
         }
       } else if (maxGuildsPerProcess != null) {
         int guildCount = await _getGuildCount();
@@ -339,8 +331,7 @@ class ShardingManager implements IShardingManager {
           _shardsPerProcess = (totalShards! / numProcesses!).ceil();
 
           if (maxGuildsPerShard != null && guildCount / totalShards! > maxGuildsPerProcess!) {
-            _logger.warning(
-                'Current setup causes guilds per shard (${guildCount / totalShards!}) to be larger than maximum ($maxGuildsPerShard)');
+            _logger.warning('Current setup causes guilds per shard (${guildCount / totalShards!}) to be larger than maximum ($maxGuildsPerShard)');
           }
         } else {
           if (maxGuildsPerShard != null) {
@@ -352,8 +343,7 @@ class ShardingManager implements IShardingManager {
           _shardsPerProcess = (totalShards! / numProcesses!).ceil();
         }
       } else {
-        throw ShardingError(
-            'Not enough parameters were provided to calculate shard and process counts');
+        throw ShardingError('Not enough parameters were provided to calculate shard and process counts');
       }
     }
   }
@@ -371,8 +361,7 @@ class ShardingManager implements IShardingManager {
     );
 
     if (response.statusCode != 200) {
-      throw ShardingError(
-          'Got invalid response ${response.statusCode} from Discord API when querying recommended shards');
+      throw ShardingError('Got invalid response ${response.statusCode} from Discord API when querying recommended shards');
     }
 
     Map<String, dynamic> gatewayBot = jsonDecode(response.body) as Map<String, dynamic>;
@@ -391,20 +380,17 @@ class ShardingManager implements IShardingManager {
 
     while (true) {
       http.Response response = await http.get(
-        Uri.parse(
-            'https://discord.com/api/users/@me/guilds${after == null ? '' : '&after=$after'}'),
+        Uri.parse('https://discord.com/api/users/@me/guilds${after == null ? '' : '&after=$after'}'),
         headers: {
           'Authorization': 'Bot $token',
         },
       );
 
       if (response.statusCode != 200) {
-        throw ShardingError(
-            'Got invalid response ${response.statusCode} from Discord API when querying guilds');
+        throw ShardingError('Got invalid response ${response.statusCode} from Discord API when querying guilds');
       }
 
-      List<Map<String, dynamic>> data =
-          (jsonDecode(response.body) as List<dynamic>).cast<Map<String, dynamic>>();
+      List<Map<String, dynamic>> data = (jsonDecode(response.body) as List<dynamic>).cast<Map<String, dynamic>>();
 
       after = data.last['id'] as String;
 
@@ -427,8 +413,7 @@ class ShardingManager implements IShardingManager {
   }
 
   Future<void> _startProcesses() async {
-    _logger.info(
-        'Starting $numProcesses processes, each with $shardsPerProcess shards (for a total of $totalShards)');
+    _logger.info('Starting $numProcesses processes, each with $shardsPerProcess shards (for a total of $totalShards)');
 
     List<int> shardIds = List.generate(_totalShards!, (id) => id);
 
@@ -454,8 +439,7 @@ class ShardingManager implements IShardingManager {
       }
     }
 
-    _logger
-        .info('Successfully started ${processes.length} processes, totalling $_totalShards shards');
+    _logger.info('Successfully started ${processes.length} processes, totalling $_totalShards shards');
   }
 
   Future<int> _getMaxConcurrency() async {
@@ -471,8 +455,7 @@ class ShardingManager implements IShardingManager {
     );
 
     if (response.statusCode != 200) {
-      throw ShardingError(
-          'Got invalid response ${response.statusCode} from Discord API when querying maximum concurrency');
+      throw ShardingError('Got invalid response ${response.statusCode} from Discord API when querying maximum concurrency');
     }
 
     Map<String, dynamic> gatewayBot = jsonDecode(response.body) as Map<String, dynamic>;
