@@ -12,7 +12,7 @@ ProcessData _configData = UncompiledDart('./test/_config.dart');
 void main() {
   group('Invalid input', () {
     test('Missing input', () {
-      expect(() => IShardingManager.create(_emptyData), throwsA(isA<ShardingError>()));
+      expect(() => IShardingManager.create(_emptyData).start(), throwsA(isA<ShardingError>()));
     });
 
     test('Mismatched input', () {
@@ -22,7 +22,7 @@ void main() {
                 totalShards: 50,
                 numProcesses: 5,
                 shardsPerProcess: 20,
-              ),
+              ).start(),
           throwsA(isA<ShardingError>()));
     });
   });
@@ -40,33 +40,9 @@ void main() {
 
       expect(manager.totalShards, equals(100));
     });
-
-    test('calculated from numProcesses', () async {
-      IShardingManager manager = IShardingManager.create(
-        _emptyData,
-        numProcesses: 5,
-        options: ShardingOptions(timeoutSpawn: false),
-      );
-
-      await manager.start();
-
-      expect(manager.totalShards, equals(25));
-    });
   });
 
   group('shardsPerProcess', () {
-    test('Sane default', () async {
-      IShardingManager manager = IShardingManager.create(
-        _emptyData,
-        numProcesses: 1,
-        options: ShardingOptions(timeoutSpawn: false),
-      );
-
-      await manager.start();
-
-      expect(manager.shardsPerProcess, equals(5));
-    });
-
     test('calculated from totalShards and numProcesses', () async {
       IShardingManager manager = IShardingManager.create(
         _emptyData,
@@ -82,18 +58,6 @@ void main() {
   });
 
   group('numProcesses', () {
-    test('calculated from totalShards', () async {
-      IShardingManager manager = IShardingManager.create(
-        _emptyData,
-        totalShards: 20,
-        options: ShardingOptions(timeoutSpawn: false),
-      );
-
-      await manager.start();
-
-      expect(manager.numProcesses, equals(4));
-    });
-
     test('calculated from totalShards and shardsPerProcess', () async {
       IShardingManager manager = IShardingManager.create(
         _emptyData,
