@@ -3,10 +3,9 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:logging/logging.dart';
-import 'package:nyxx/nyxx.dart';
-import 'package:nyxx/src/internal/http_endpoints.dart';
-import 'package:nyxx_sharding/src/exceptions.dart';
+import 'package:http/http.dart' as http;
 
+import 'package:nyxx_sharding/src/exceptions.dart';
 import 'package:nyxx_sharding/src/process_data/process_data.dart';
 import 'package:nyxx_sharding/src/sharding_options.dart';
 
@@ -26,6 +25,12 @@ abstract class IShardingManager {
 
   /// The total number of shards to spawn across all processes.
   int? get totalShards;
+
+  /// The maximum number of guilds on a single shard.
+  int? get maxGuildsPerShard;
+
+  /// The maximum number of guilds on a single process.
+  int? get maxGuildsPerProcess;
 
   /// A Discord bot token used to automatically determine the maximum IDENTIFY concurrency for the bot. If [totalShards] is not provided, [token] will also be
   /// used to get the total shard count.
@@ -49,16 +54,109 @@ abstract class IShardingManager {
   /// [signal] will be sent to all processes.
   Future<void> kill([ProcessSignal signal = ProcessSignal.sigterm]);
 
-  /// Create a new [IShardingManager]
+  /// Create a new [IShardingManager].
+  ///
+  /// The table below indicates how the different combinations of values are combined to calculate process counts and shard counts:
+  /// ```
+  /// sPP = shardsPerProcess
+  /// nP = numProcesses
+  /// tS = totalShards
+  /// gPS = guildsPerShard
+  /// gPP = guildsPerProcess
+  /// tkn = token
+  /// gC = guildCount
+  ///
+  /// fetch(d) = fetch `d` from the Discord API using the provided token
+  ///
+  /// |t|s|n|t|g|g|
+  /// |k|P|P|S|P|P|
+  /// |n|P| | |S|P|
+  /// |-|-|-|-|-|-|
+  /// |x|x|x|x|x|x| CHECK tS = nP * sPP; WARN IF fetch(gC) / nP > gPP; WARN IF fetch(gC) / tS > gPS;
+  /// |x|x|x|x|x| | CHECK tS = nP * sPP; WARN IF fetch(gC) / tS > gPS;
+  /// |x|x|x|x| |x| CHECK tS = nP * sPP; WARN IF fetch(gC) / nP > gPP;
+  /// |x|x|x|x| | | CHECK tS = nP * sPP;
+  /// |x|x|x| |x|x| USE tS = sPP * nP; WARN IF fetch(gC) / nP > gPP; WARN IF fetch(gC) / tS > gPS;
+  /// |x|x|x| |x| | USE tS = sPP * nP; WARN IF fetch(gC) / tS > gPS;
+  /// |x|x|x| | |x| USE tS = sPP * nP; WARN IF fetch(gC) / nP > gPP;
+  /// |x|x|x| | | | USE tS = sPP * nP;
+  /// |x|x| |x|x|x| USE nP = ceil(tS / sPP); WARN IF fetch(gC) / nP > gPP; WARN IF fetch(gC) / tS > gPS;
+  /// |x|x| |x|x| | USE nP = ceil(tS / sPP); WARN IF fetch(gC) / tS > gPS;
+  /// |x|x| |x| |x| USE nP = ceil(tS / sPP); WARN IF fetch(gC) / nP > gPP;
+  /// |x|x| |x| | | USE nP = ceil(tS / sPP);
+  /// |x|x| | |x|x| USE tS = ceil(fetch(gC) / gPS); USE nP = ceil(tS / sPP); WARN IF fetch(gC) / nP > gPP;
+  /// |x|x| | |x| | USE tS = ceil(fetch(gC) / gPS); USE nP = ceil(tS / sPP);
+  /// |x|x| | | |x| USE nP = ceil(fetch(gC) / gPP); USE tS = sPP * nP;
+  /// |x|x| | | | | USE tS = fetch(tS); USE nP = ceil(tS / sPP);
+  /// |x| |x|x|x|x| USE sPP = ceil(tS / nP); WARN IF fetch(gC) / nP > gPP; WARN IF fetch(gC) / tS > gPS;
+  /// |x| |x|x|x| | USE sPP = ceil(tS / nP); WARN IF fetch(gC) / tS > gPS;
+  /// |x| |x|x| |x| USE sPP = ceil(tS / nP); WARN IF fetch(gC) / nP > gPP;
+  /// |x| |x|x| | | USE sPP = ceil(tS / nP);
+  /// |x| |x| |x|x| USE tS = ceil(fetch(gC) / gPS); USE sPP = ceil(tS / nP); WARN IF fetch(gC) / nP > gPP;
+  /// |x| |x| |x| | USE tS = ceil(fetch(gC) / gPS); USE sPP = ceil(tS / nP);
+  /// |x| |x| | |x| USE tS = fetch(tS); USE sPP = ceil(tS / nP); WARN IF fetch(gC) / nP > gPP;
+  /// |x| |x| | | | USE tS = fetch(tS); USE sPP = ceil(tS / nP);
+  /// |x| | |x|x|x| USE nP = ceil(fetch(gC) / gPP); USE sPP = ceil(tS / nP); WARN IF fetch(gC) / tS > gPS;
+  /// |x| | |x|x| | ERROR
+  /// |x| | |x| |x| USE nP = ceil(fetch(gC) / gPP); USE sPP = ceil(tS / nP);
+  /// |x| | |x| | | ERROR
+  /// |x| | | |x|x| USE nP = ceil(fetch(gC) / gPP); USE tS = ceil(fetch(gC) / gPS); USE sPP = ceil(tS / nP);
+  /// |x| | | |x| | ERROR
+  /// |x| | | | |x| USE nP = ceil(fetch(gC) / gPP); USE tS = fetch(tS); USE sPP = ceil(tS / nP);
+  /// |x| | | | | | ERROR
+  /// | |x|x|x|x|x| CHECK tS = nP * sPP; WARN "No token to fetch guild count";
+  /// | |x|x|x|x| | CHECK tS = nP * sPP; WARN "No token to fetch guild count";
+  /// | |x|x|x| |x| CHECK tS = nP * sPP; WARN "No token to fetch guild count";
+  /// | |x|x|x| | | CHECK tS = nP * sPP;
+  /// | |x|x| |x|x| USE tS = sPP * nP; WARN "No token to fetch guild count";
+  /// | |x|x| |x| | USE tS = sPP * nP; WARN "No token to fetch guild count";
+  /// | |x|x| | |x| USE tS = sPP * nP; WARN "No token to fetch guild count";
+  /// | |x|x| | | | USE tS = sPP * nP;
+  /// | |x| |x|x|x| USE nP = ceil(tS / sPP); WARN "No token to fetch guild count";
+  /// | |x| |x|x| | USE nP = ceil(tS / sPP); WARN "No token to fetch guild count";
+  /// | |x| |x| |x| USE nP = ceil(tS / sPP); WARN "No token to fetch guild count";
+  /// | |x| |x| | | USE nP = ceil(tS / sPP);
+  /// | |x| | |x|x| ERROR
+  /// | |x| | |x| | ERROR
+  /// | |x| | | |x| ERROR
+  /// | |x| | | | | ERROR
+  /// | | |x|x|x|x| USE sPP = ceil(tS / nP); WARN "No token to fetch guild count";
+  /// | | |x|x|x| | USE sPP = ceil(tS / nP); WARN "No token to fetch guild count";
+  /// | | |x|x| |x| USE sPP = ceil(tS / nP); WARN "No token to fetch guild count";
+  /// | | |x|x| | | USE sPP = ceil(tS / nP);
+  /// | | |x| |x|x| ERROR
+  /// | | |x| |x| | ERROR
+  /// | | |x| | |x| ERROR
+  /// | | |x| | | | ERROR
+  /// | | | |x|x|x| ERROR
+  /// | | | |x|x| | ERROR
+  /// | | | |x| |x| ERROR
+  /// | | | |x| | | ERROR
+  /// | | | | |x|x| ERROR
+  /// | | | | |x| | ERROR
+  /// | | | | | |x| ERROR
+  /// | | | | | | | ERROR
+  /// ```
   factory IShardingManager.create(
     ProcessData processData, {
     int? shardsPerProcess,
     int? numProcesses,
     int? totalShards,
+    int? maxGuildsPerShard,
+    int? maxGuildsPerProcess,
     String? token,
     ShardingOptions options = const ShardingOptions(),
   }) =>
-      ShardingManager(processData, shardsPerProcess: shardsPerProcess, numProcesses: numProcesses, totalShards: totalShards, token: token, options: options);
+      ShardingManager(
+        processData,
+        shardsPerProcess: shardsPerProcess,
+        numProcesses: numProcesses,
+        totalShards: totalShards,
+        maxGuildsPerProcess: maxGuildsPerProcess,
+        maxGuildsPerShard: maxGuildsPerShard,
+        token: token,
+        options: options,
+      );
 }
 
 class ShardingManager implements IShardingManager {
@@ -71,10 +169,16 @@ class ShardingManager implements IShardingManager {
   int? get numProcesses => _numProcesses;
   @override
   int? get totalShards => _totalShards;
+  @override
+  int? get maxGuildsPerShard => _maxGuildsPerShard;
+  @override
+  int? get maxGuildsPerProcess => _maxGuildsPerProcess;
 
   int? _shardsPerProcess;
   int? _numProcesses;
   int? _totalShards;
+  final int? _maxGuildsPerShard;
+  final int? _maxGuildsPerProcess;
 
   @override
   final String? token;
@@ -94,21 +198,15 @@ class ShardingManager implements IShardingManager {
     int? shardsPerProcess,
     int? numProcesses,
     int? totalShards,
+    int? maxGuildsPerShard,
+    int? maxGuildsPerProcess,
     this.token,
     this.options = const ShardingOptions(),
   })  : _shardsPerProcess = shardsPerProcess,
         _numProcesses = numProcesses,
-        _totalShards = totalShards {
-    if (_shardsPerProcess == null && _numProcesses == null && _totalShards == null && token == null) {
-      throw ShardingError('One of token, totalShards, or shardsPerProcess and numProcesses must be specified');
-    }
-
-    if (_totalShards != null && _shardsPerProcess != null && _numProcesses != null) {
-      if (_totalShards != _shardsPerProcess! * _numProcesses!) {
-        throw ShardingError('Invalid total shard count specified: total shard count does not equal product of shardsPerProcess and numProcesses');
-      }
-    }
-
+        _totalShards = totalShards,
+        _maxGuildsPerShard = maxGuildsPerShard,
+        _maxGuildsPerProcess = maxGuildsPerProcess {
     if (_totalShards != null && _totalShards! < 1) {
       throw ShardingError('Invalid shard count specified: total shard count cannot be below 1');
     }
@@ -118,7 +216,16 @@ class ShardingManager implements IShardingManager {
     }
 
     if (_shardsPerProcess != null && _shardsPerProcess! < 1) {
-      throw ShardingError('Invalid shard per process count specified: total shards per process cannot be less than 1');
+      throw ShardingError(
+          'Invalid shard per process count specified: total shards per process cannot be less than 1');
+    }
+
+    if (_maxGuildsPerProcess != null && _maxGuildsPerProcess! < 1) {
+      throw ShardingError('Invalid guild count per process: maximum guild count cannot be below 1');
+    }
+
+    if (_maxGuildsPerShard != null && _maxGuildsPerShard! < 1) {
+      throw ShardingError('Invalid guild count per shard: maximum guild count cannot be below 1');
     }
   }
 
@@ -126,8 +233,13 @@ class ShardingManager implements IShardingManager {
   Future<void> start() async {
     await _computeShardAndProcessCounts();
 
-    if ((_totalShards! / _shardsPerProcess!).ceil() < _numProcesses!) {
+    if ((totalShards! / shardsPerProcess!).ceil() < numProcesses!) {
       _logger.info('Number of processes is larger than needed; less processes will be spawned');
+      _logger.info(
+        'Reducing process count from $numProcesses to ${(totalShards! / shardsPerProcess!).ceil()}',
+      );
+
+      _numProcesses = (totalShards! / shardsPerProcess!).ceil();
     }
 
     for (final signal in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
@@ -142,67 +254,182 @@ class ShardingManager implements IShardingManager {
   }
 
   Future<void> _computeShardAndProcessCounts() async {
-    if ((_totalShards == null || _numProcesses == null) && _shardsPerProcess == null) {
-      _shardsPerProcess = 5; // TODO determine best default
+    if ([totalShards, numProcesses, shardsPerProcess].where((element) => element != null).length >=
+        2) {
+      if (totalShards != null && numProcesses != null && shardsPerProcess != null) {
+        if (totalShards != numProcesses! * shardsPerProcess!) {
+          throw ShardingError(
+            'Total shard count ($totalShards) was not equal to product of process count and shards per process ($numProcesses * $shardsPerProcess = ${numProcesses! * shardsPerProcess!})',
+          );
+        }
+      } else if (numProcesses != null && shardsPerProcess != null) {
+        _totalShards = numProcesses! * shardsPerProcess!;
+      } else if (totalShards != null && shardsPerProcess != null) {
+        _numProcesses = (totalShards! / shardsPerProcess!).ceil();
+      } else if (totalShards != null && numProcesses != null) {
+        _shardsPerProcess = (totalShards! / numProcesses!).ceil();
+      }
+
+      if (maxGuildsPerProcess != null || maxGuildsPerShard != null) {
+        if (token == null) {
+          _logger.warning(
+              'No token to fetch guild count to validate maximum guilds per shard and per process');
+          return;
+        }
+
+        int guildCount = await _getGuildCount();
+
+        if (maxGuildsPerProcess != null && guildCount / numProcesses! > maxGuildsPerProcess!) {
+          _logger.warning(
+              'Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
+        }
+
+        if (maxGuildsPerShard != null && guildCount / totalShards! > maxGuildsPerShard!) {
+          _logger.warning(
+              'Current setup causes guilds per shard (${guildCount / totalShards!}) to be larger than maximum ($maxGuildsPerShard)');
+        }
+      }
+    } else {
+      if (token == null) {
+        throw ShardingError(
+            'A token must be proivided if less than two of total shards, shards per process or process count are provided');
+      }
+
+      if (shardsPerProcess != null) {
+        if (maxGuildsPerShard != null || maxGuildsPerProcess != null) {
+          int guildCount = await _getGuildCount();
+
+          if (maxGuildsPerShard != null) {
+            _totalShards = (guildCount / maxGuildsPerShard!).ceil();
+            _numProcesses = (totalShards! / shardsPerProcess!).ceil();
+
+            if (maxGuildsPerProcess != null && guildCount / numProcesses! > maxGuildsPerProcess!) {
+              _logger.warning(
+                  'Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
+            }
+          } else if (maxGuildsPerProcess != null) {
+            _numProcesses = (guildCount / maxGuildsPerProcess!).ceil();
+            _totalShards = numProcesses! * shardsPerProcess!;
+          }
+        } else {
+          _totalShards = await _getRecommendedShards();
+          _numProcesses = (totalShards! / shardsPerProcess!).ceil();
+        }
+      } else if (numProcesses != null) {
+        int guildCount = await _getGuildCount();
+
+        if (maxGuildsPerShard != null) {
+          _totalShards = (guildCount / maxGuildsPerShard!).ceil();
+          _shardsPerProcess = (totalShards! / numProcesses!).ceil();
+        } else {
+          _totalShards = await _getRecommendedShards();
+          _shardsPerProcess = (totalShards! / numProcesses!).ceil();
+        }
+
+        if (maxGuildsPerProcess != null && guildCount / numProcesses! > maxGuildsPerProcess!) {
+          _logger.warning(
+              'Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
+        }
+      } else if (maxGuildsPerProcess != null) {
+        int guildCount = await _getGuildCount();
+
+        _numProcesses = (guildCount / maxGuildsPerProcess!).ceil();
+
+        if (totalShards != null) {
+          _shardsPerProcess = (totalShards! / numProcesses!).ceil();
+
+          if (maxGuildsPerShard != null && guildCount / totalShards! > maxGuildsPerProcess!) {
+            _logger.warning(
+                'Current setup causes guilds per shard (${guildCount / totalShards!}) to be larger than maximum ($maxGuildsPerShard)');
+          }
+        } else {
+          if (maxGuildsPerShard != null) {
+            _totalShards = (guildCount / maxGuildsPerShard!).ceil();
+          } else {
+            _totalShards = await _getRecommendedShards();
+          }
+
+          _shardsPerProcess = (totalShards! / numProcesses!).ceil();
+        }
+      } else {
+        throw ShardingError(
+            'Not enough parameters were provided to calculate shard and process counts');
+      }
+    }
+  }
+
+  Future<int> _getRecommendedShards() async {
+    if (token == null) {
+      throw ShardingError('Cannot get recommended shard count when token is null');
     }
 
-    if (_totalShards == null) {
-      if (_shardsPerProcess != null && _numProcesses != null) {
-        _totalShards = _numProcesses! * _shardsPerProcess!;
-      } else if (token != null) {
-        _totalShards = await _getRecomendedShards(token!);
+    http.Response response = await http.get(
+      Uri.parse('https://discord.com/api/gateway/bot'),
+      headers: {
+        'Authorization': 'Bot $token',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw ShardingError(
+          'Got invalid response ${response.statusCode} from Discord API when querying recommended shards');
+    }
+
+    Map<String, dynamic> gatewayBot = jsonDecode(response.body) as Map<String, dynamic>;
+
+    return gatewayBot['shards'] as int;
+  }
+
+  Future<int> _getGuildCount() async {
+    if (token == null) {
+      throw ShardingError('Cannot get guild count when token is null');
+    }
+
+    String? after;
+
+    int total = 0;
+
+    while (true) {
+      http.Response response = await http.get(
+        Uri.parse(
+            'https://discord.com/api/users/@me/guilds${after == null ? '' : '&after=$after'}'),
+        headers: {
+          'Authorization': 'Bot $token',
+        },
+      );
+
+      if (response.statusCode != 200) {
+        throw ShardingError(
+            'Got invalid response ${response.statusCode} from Discord API when querying guilds');
+      }
+
+      List<Map<String, dynamic>> data =
+          (jsonDecode(response.body) as List<dynamic>).cast<Map<String, dynamic>>();
+
+      after = data.last['id'] as String;
+
+      total += data.length;
+
+      if (data.length < 200) {
+        break;
+      }
+
+      if (response.headers['X-RateLimit-Remaining'] == '0') {
+        int resetTimestamp = num.parse(response.headers['X-RateLimit-Reset']!).ceil();
+
+        DateTime resetTime = DateTime.fromMillisecondsSinceEpoch(resetTimestamp);
+
+        await Future.delayed(resetTime.difference(DateTime.now()));
       }
     }
 
-    _numProcesses ??= (_totalShards! / _shardsPerProcess!).ceil();
-    _shardsPerProcess ??= (_totalShards! / _numProcesses!).ceil();
-  }
-
-  Future<int> _getRecomendedShards(String token) async {
-    INyxx client = NyxxFactory.createNyxxRest(token, GatewayIntents.none, Snowflake.zero());
-
-    await client.connect();
-
-    IHttpResponse gatewayBot = await (client.httpEndpoints as HttpEndpoints).getGatewayBot();
-
-    if (gatewayBot is IHttpResponseError) {
-      throw ShardingError('Cannot connect to Discord to get recommended shard count: [$gatewayBot]');
-    }
-
-    await client.dispose();
-
-    int recommended = (gatewayBot as IHttpResponseSucess).jsonBody["shards"] as int;
-
-    _logger.info('Got recommended number of shards: $recommended');
-
-    return recommended;
-  }
-
-  Future<int> _getMaxConcurrency() async {
-    if (token == null) {
-      return 1;
-    }
-
-    INyxx client = NyxxFactory.createNyxxRest(token!, GatewayIntents.none, Snowflake.zero());
-
-    await client.connect();
-
-    IHttpResponse gatewayBot = await (client.httpEndpoints as HttpEndpoints).getGatewayBot();
-
-    if (gatewayBot is IHttpResponseError) {
-      throw ShardingError('Cannot connect to Discord to get max connection concurrency: [$gatewayBot]');
-    }
-
-    await client.dispose();
-
-    int maxConcurrency = (gatewayBot as IHttpResponseSucess).jsonBody['session_start_limit']['max_concurrency'] as int;
-
-    _logger.info('Got max concurrency: $maxConcurrency');
-
-    return maxConcurrency;
+    return total;
   }
 
   Future<void> _startProcesses() async {
+    _logger.info(
+        'Starting $numProcesses processes, each with $shardsPerProcess shards (for a total of $totalShards)');
+
     List<int> shardIds = List.generate(_totalShards!, (id) => id);
 
     Duration individualConnectionDelay;
@@ -227,7 +454,30 @@ class ShardingManager implements IShardingManager {
       }
     }
 
-    _logger.info('Successfully started ${processes.length} processes, totalling $_totalShards shards');
+    _logger
+        .info('Successfully started ${processes.length} processes, totalling $_totalShards shards');
+  }
+
+  Future<int> _getMaxConcurrency() async {
+    if (token == null) {
+      return 1;
+    }
+
+    http.Response response = await http.get(
+      Uri.parse('https://discord.com/api/gateway/bot'),
+      headers: {
+        'Authorization': 'Bot $token',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw ShardingError(
+          'Got invalid response ${response.statusCode} from Discord API when querying maximum concurrency');
+    }
+
+    Map<String, dynamic> gatewayBot = jsonDecode(response.body) as Map<String, dynamic>;
+
+    return gatewayBot['session_start_limit']['max_concurrency'] as int;
   }
 
   Future<Process> _spawn(List<int> shardIds) async {
