@@ -254,7 +254,10 @@ class ShardingManager implements IShardingManager {
 
   Future<void> _computeShardAndProcessCounts() async {
     if ([totalShards, numProcesses, shardsPerProcess].where((element) => element != null).length >= 2) {
+      // If two of [totalShards], [numProcesses] or [shardsPerProcess] are given, the third can be calculated with
+      // this identity: totalShards = numProcesses * shardsPerProcess
       if (totalShards != null && numProcesses != null && shardsPerProcess != null) {
+        // If all three are provided, check that the values respect the identity
         if (totalShards != numProcesses! * shardsPerProcess!) {
           throw ShardingError(
             'Total shard count ($totalShards) was not equal to product of process count and shards per process ($numProcesses * $shardsPerProcess = ${numProcesses! * shardsPerProcess!})',
@@ -268,49 +271,37 @@ class ShardingManager implements IShardingManager {
         _shardsPerProcess = (totalShards! / numProcesses!).ceil();
       }
 
-      if (maxGuildsPerProcess != null || maxGuildsPerShard != null) {
-        if (token == null) {
-          _logger.warning('No token to fetch guild count to validate maximum guilds per shard and per process');
-          return;
-        }
-
-        int guildCount = await _getGuildCount();
-
-        if (maxGuildsPerProcess != null && guildCount / numProcesses! > maxGuildsPerProcess!) {
-          _logger.warning('Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
-        }
-
-        if (maxGuildsPerShard != null && guildCount / totalShards! > maxGuildsPerShard!) {
-          _logger.warning('Current setup causes guilds per shard (${guildCount / totalShards!}) to be larger than maximum ($maxGuildsPerShard)');
-        }
-      }
+      // Warn about guild limits
+      await _warnGuildLimits();
     } else {
+      // If less than 2 are provided, we need a token as we will need to fetch guild count or recommended shard count.
       if (token == null) {
-        throw ShardingError('A token must be proivided if less than two of total shards, shards per process or process count are provided');
+        throw ShardingError('A token must be provided if less than two of total shards, shards per process or process count are provided');
       }
 
       if (shardsPerProcess != null) {
+        // Get [totalShards] and [numProcesses] from the guild limits if we have them
         if (maxGuildsPerShard != null || maxGuildsPerProcess != null) {
           int guildCount = await _getGuildCount();
 
           if (maxGuildsPerShard != null) {
             _totalShards = (guildCount / maxGuildsPerShard!).ceil();
             _numProcesses = (totalShards! / shardsPerProcess!).ceil();
-
-            if (maxGuildsPerProcess != null && guildCount / numProcesses! > maxGuildsPerProcess!) {
-              _logger.warning('Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
-            }
           } else if (maxGuildsPerProcess != null) {
             _numProcesses = (guildCount / maxGuildsPerProcess!).ceil();
             _totalShards = numProcesses! * shardsPerProcess!;
           }
+
+          await _warnGuildLimits(guildCount);
         } else {
+          // If there are no guild limits, fall back to fetching the recommended shard count from Discord
           _totalShards = await _getRecommendedShards();
           _numProcesses = (totalShards! / shardsPerProcess!).ceil();
         }
       } else if (numProcesses != null) {
         int guildCount = await _getGuildCount();
 
+        // We can't use maxGuildPerProcess since we already have a number of processes
         if (maxGuildsPerShard != null) {
           _totalShards = (guildCount / maxGuildsPerShard!).ceil();
           _shardsPerProcess = (totalShards! / numProcesses!).ceil();
@@ -319,31 +310,46 @@ class ShardingManager implements IShardingManager {
           _shardsPerProcess = (totalShards! / numProcesses!).ceil();
         }
 
-        if (maxGuildsPerProcess != null && guildCount / numProcesses! > maxGuildsPerProcess!) {
-          _logger.warning('Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
-        }
+        await _warnGuildLimits(guildCount);
       } else if (maxGuildsPerProcess != null) {
         int guildCount = await _getGuildCount();
 
         _numProcesses = (guildCount / maxGuildsPerProcess!).ceil();
 
-        if (totalShards != null) {
-          _shardsPerProcess = (totalShards! / numProcesses!).ceil();
-
-          if (maxGuildsPerShard != null && guildCount / totalShards! > maxGuildsPerProcess!) {
-            _logger.warning('Current setup causes guilds per shard (${guildCount / totalShards!}) to be larger than maximum ($maxGuildsPerShard)');
-          }
-        } else {
+        if (totalShards == null) {
           if (maxGuildsPerShard != null) {
             _totalShards = (guildCount / maxGuildsPerShard!).ceil();
           } else {
             _totalShards = await _getRecommendedShards();
           }
-
-          _shardsPerProcess = (totalShards! / numProcesses!).ceil();
         }
+
+        _shardsPerProcess = (totalShards! / numProcesses!).ceil();
+
+        await _warnGuildLimits(guildCount);
       } else {
         throw ShardingError('Not enough parameters were provided to calculate shard and process counts');
+      }
+    }
+  }
+
+  Future<void> _warnGuildLimits([int? guildCount]) async {
+    if (maxGuildsPerProcess != null || maxGuildsPerShard != null) {
+      if (guildCount == null) {
+        if (token == null) {
+          _logger.warning('No token to fetch guild count to validate maximum guilds per shard and per process');
+          return;
+        }
+
+        guildCount = await _getGuildCount();
+      }
+
+      if (maxGuildsPerProcess != null && guildCount / numProcesses! > maxGuildsPerProcess!) {
+        _logger.warning('Current setup causes guilds per process (${guildCount / numProcesses!}) to be larger than maximum ($maxGuildsPerProcess)');
+      }
+
+      if (maxGuildsPerShard != null && guildCount / totalShards! > maxGuildsPerShard!) {
+        _logger.warning('Current setup causes guilds per shard (${guildCount / totalShards!}) to be larger than maximum ($maxGuildsPerShard)');
       }
     }
   }
