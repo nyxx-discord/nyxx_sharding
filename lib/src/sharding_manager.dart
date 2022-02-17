@@ -17,7 +17,7 @@ import 'package:nyxx_sharding/src/communication/sharding_server.dart';
 ///
 /// The total number of shards, total number of processes and number of shards per process can be manually set, or automatically calculated if [token] is
 /// provided. [token] can also be set in conjunction with either [shardsPerProcess] or [numProcesses] for more control.
-abstract class IShardingManager implements DataProvider {
+abstract class IShardingManager implements IDataProvider {
   /// The [ProcessData] that will be used to spawn the child processes.
   ProcessData get processData;
 

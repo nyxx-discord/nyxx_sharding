@@ -10,7 +10,7 @@ import 'package:nyxx_sharding/src/exceptions.dart';
 import 'package:nyxx_sharding/src/sharding_manager.dart';
 
 /// A plugin that can be used in spawned processes to allow communication between processes.
-abstract class IShardingPlugin implements BasePlugin, DataProvider {
+abstract class IShardingPlugin implements BasePlugin, IDataProvider {
   /// A stream of events received on this process.
   ///
   /// Events can be sent to other processes with [sendManager] or [broadcast].

@@ -6,7 +6,7 @@ import 'dart:math';
 import 'package:nyxx_sharding/src/communication/common.dart';
 import 'package:nyxx_sharding/src/sharding_manager.dart';
 
-mixin ShardingServer implements IShardingManager, DataProvider {
+mixin ShardingServer implements IShardingManager, IDataProvider {
   HttpServer? server;
   final List<WebSocket> connections = [];
 
