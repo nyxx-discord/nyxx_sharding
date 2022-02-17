@@ -14,7 +14,7 @@ enum DataRequestType {
   maxxRss,
 }
 
-abstract class DataProvider {
+abstract class IDataProvider {
   /// Fetches the cached channels count from all processes.
   ///
   /// Each element in the list is the result of querying a single process. The list is unordered, and might not contain information from all processes if
