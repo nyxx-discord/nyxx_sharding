@@ -396,6 +396,7 @@ class ShardingManager implements IShardingManager {
 
       total += data.length;
 
+      // Endpoint returns 200 guilds per page; if we get less than 200 we have reached the end of the guild list
       if (data.length < 200) {
         break;
       }
