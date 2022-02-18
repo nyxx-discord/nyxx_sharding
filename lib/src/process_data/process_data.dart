@@ -18,11 +18,13 @@ abstract class ProcessData {
   ///
   /// The spawned process will have the following environment variables set in addition to the existing variables:
   /// - `NYXX_SHARDING_SHARD_IDS`: The ids of the shards to spawn in the process;
-  /// - `NYXX_SHARDING_TOTAL_SHARDS`: The total number of shards being spawned across all processes.
-  Future<Process> spawn(List<int> processShards, int totalShards) => Process.start(executable, args,
+  /// - `NYXX_SHARDING_TOTAL_SHARDS`: The total number of shards being spawned across all processes;
+  /// - `NYXX_SHARDING_PORT`: The port to connect to in order to establish a websocket connection with the manager process.
+  Future<Process> spawn(List<int> processShards, int totalShards, int port) => Process.start(executable, args,
       environment: {
         'NYXX_SHARDING_SHARD_IDS': processShards.join(","),
         'NYXX_SHARDING_TOTAL_SHARDS': totalShards.toString(),
+        'NYXX_SHARDING_PORT': port.toString(),
       },
       workingDirectory: cwd);
 }
