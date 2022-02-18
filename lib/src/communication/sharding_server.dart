@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:logging/logging.dart';
 import 'package:nyxx_sharding/src/communication/common.dart';
 import 'package:nyxx_sharding/src/sharding_manager.dart';
 
@@ -20,10 +21,18 @@ mixin ShardingServer implements IShardingManager, IDataProvider {
   @override
   Stream<String> get events => eventController.stream;
 
+  final Logger _logger = Logger('Sharding Server');
+
   Future<void> startServer() async {
+    _logger.fine('Starting server');
+
     server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
 
+    _logger.fine('Server listening on port $port');
+
     server!.transform(WebSocketTransformer()).listen((socket) {
+      _logger.finer('Got connection to server');
+
       connections.add(socket);
 
       StreamSubscription<String> subscription = socket.cast<String>().listen((event) => handleEvent(event, socket));
@@ -36,6 +45,8 @@ mixin ShardingServer implements IShardingManager, IDataProvider {
   }
 
   void send(WebSocket socket, EventType type, int id, dynamic data) {
+    _logger.finest('Sending $data in message of type $type and id $id');
+
     socket.add(jsonEncode({
       'type': type.index,
       'data': data,
@@ -49,6 +60,8 @@ mixin ShardingServer implements IShardingManager, IDataProvider {
     dynamic data = event['data'];
     int id = event['id'] as int;
     EventType type = EventType.values[event['type'] as int];
+
+    _logger.finest('Got message $data of type $type and id $id');
 
     switch (type) {
       case EventType.sendManager:
@@ -79,6 +92,8 @@ mixin ShardingServer implements IShardingManager, IDataProvider {
 
   @override
   void broadcast(String message) {
+    _logger.finer('Broadcasting $message to all connections');
+
     for (final connection in connections) {
       send(connection, EventType.broadcast, seqNum++, message);
     }

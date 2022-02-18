@@ -39,6 +39,8 @@ class ShardingPlugin implements IShardingPlugin {
 
   final Map<int, Completer<List<dynamic>>> pendingDataRequests = {};
 
+  final Logger _logger = Logger('Sharding Client');
+
   final StreamController<String> eventsController = StreamController.broadcast();
   @override
   Stream<String> get events => eventsController.stream;
@@ -57,7 +59,11 @@ class ShardingPlugin implements IShardingPlugin {
 
     String url = 'ws://${InternetAddress.loopbackIPv4.address}:$port';
 
+    _logger.fine('Connecting to sharding server at $url...');
+
     connection = await WebSocket.connect(url);
+
+    _logger.fine('Connected to sharding server!');
 
     connection!.cast<String>().listen(handleEvent);
 
@@ -68,6 +74,8 @@ class ShardingPlugin implements IShardingPlugin {
     if (connection == null) {
       await connected;
     }
+
+    _logger.finer('Sending $data to manager with id $id and type $type');
 
     connection!.add(jsonEncode({
       'type': type.index,
@@ -82,6 +90,8 @@ class ShardingPlugin implements IShardingPlugin {
     dynamic data = event['data'];
     int id = event['id'] as int;
     EventType type = EventType.values[event['type'] as int];
+
+    _logger.finer('Got message $data with id $id and type $type');
 
     switch (type) {
       case EventType.sendManager:

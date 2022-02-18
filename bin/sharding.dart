@@ -117,8 +117,8 @@ void main(List<String> args) async {
 
   Logger.root.level = Level.LEVELS.singleWhere((level) => level.name.toLowerCase() == results['verbose']);
 
-  Logger.root.onRecord.listen((message) {
-    print(message.message);
+  Logger.root.onRecord.listen((rec) {
+    print("[${rec.time}] [${rec.level.name}] [${rec.loggerName}] ${rec.message}");
   });
 
   try {
