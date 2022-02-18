@@ -247,6 +247,10 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
     await _computeShardAndProcessCounts();
 
+    _logger.fine('Process count: $numProcesses');
+    _logger.fine('Shard count: $totalShards');
+    _logger.fine('Shards per process: $shardsPerProcess');
+
     if ((totalShards! / shardsPerProcess!).ceil() < numProcesses!) {
       _logger.info('Number of processes is larger than needed; less processes will be spawned');
       _logger.info(
@@ -258,6 +262,8 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
     for (final signal in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
       signal.watch().listen((event) async {
+        _logger.info('Exiting...');
+
         await kill(event);
 
         Isolate.current.kill();
@@ -399,6 +405,8 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
     int total = 0;
 
+    _logger.fine('Fetching guilds...');
+
     while (true) {
       http.Response response = await http.get(
         Uri.parse('https://discord.com/api/users/@me/guilds${after == null ? '' : '&after=$after'}'),
@@ -417,6 +425,8 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
       total += data.length;
 
+      _logger.finer('Got response from guilds endpoint with ${data.length} guilds');
+
       // Endpoint returns 200 guilds per page; if we get less than 200 we have reached the end of the guild list
       if (data.length < 200) {
         break;
@@ -430,6 +440,8 @@ class ShardingManager with ShardingServer implements IShardingManager {
         await Future.delayed(resetTime.difference(DateTime.now()));
       }
     }
+
+    _logger.fine('Found a total of $total guilds');
 
     return total;
   }
@@ -456,6 +468,8 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
       await _spawn(shardIds.sublist(totalSpawned, lastIndex));
 
+      _logger.fine('Spawned process with shards ${shardIds.sublist(totalSpawned, lastIndex)}');
+
       if (lastIndex != shardIds.length) {
         await Future.delayed(individualConnectionDelay * (lastIndex - totalSpawned));
       }
@@ -466,8 +480,11 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
   Future<int> _getMaxConcurrency() async {
     if (token == null) {
+      _logger.fine('No token; returning default max concurrency (1)');
       return 1;
     }
+
+    _logger.fine('Fetching maximum concurrency...');
 
     http.Response response = await http.get(
       Uri.parse('https://discord.com/api/gateway/bot'),
@@ -482,7 +499,11 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
     Map<String, dynamic> gatewayBot = jsonDecode(response.body) as Map<String, dynamic>;
 
-    return gatewayBot['session_start_limit']['max_concurrency'] as int;
+    int maxConcurrency = gatewayBot['session_start_limit']['max_concurrency'] as int;
+
+    _logger.fine('Got maximum concurrency: $maxConcurrency');
+
+    return maxConcurrency;
   }
 
   Future<Process> _spawn(List<int> shardIds) async {
