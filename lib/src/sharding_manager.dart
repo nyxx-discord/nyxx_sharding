@@ -5,15 +5,18 @@ import 'dart:isolate';
 import 'package:logging/logging.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:nyxx_sharding/src/communication/common.dart';
 import 'package:nyxx_sharding/src/exceptions.dart';
 import 'package:nyxx_sharding/src/process_data/process_data.dart';
 import 'package:nyxx_sharding/src/sharding_options.dart';
+import 'package:nyxx_sharding/src/communication/sharding_plugin.dart';
+import 'package:nyxx_sharding/src/communication/sharding_server.dart';
 
 /// Spawns and contains processes running individual instances of the bot.
 ///
 /// The total number of shards, total number of processes and number of shards per process can be manually set, or automatically calculated if [token] is
 /// provided. [token] can also be set in conjunction with either [shardsPerProcess] or [numProcesses] for more control.
-abstract class IShardingManager {
+abstract class IShardingManager implements IDataProvider {
   /// The [ProcessData] that will be used to spawn the child processes.
   ProcessData get processData;
 
@@ -53,6 +56,16 @@ abstract class IShardingManager {
   ///
   /// [signal] will be sent to all processes.
   Future<void> kill([ProcessSignal signal = ProcessSignal.sigterm]);
+
+  /// A stream of events received on this process.
+  ///
+  /// Events can be sent using [IShardingPlugin.sendManager].
+  Stream<String> get events;
+
+  /// Sends a message to all child processes.
+  ///
+  /// The message will be added to the [IShardingPlugin.events] stream.
+  void broadcast(String message);
 
   /// Create a new [IShardingManager].
   ///
@@ -159,7 +172,7 @@ abstract class IShardingManager {
       );
 }
 
-class ShardingManager implements IShardingManager {
+class ShardingManager with ShardingServer implements IShardingManager {
   @override
   final ProcessData processData;
 
@@ -230,6 +243,8 @@ class ShardingManager implements IShardingManager {
 
   @override
   Future<void> start() async {
+    await super.startServer();
+
     await _computeShardAndProcessCounts();
 
     if ((totalShards! / shardsPerProcess!).ceil() < numProcesses!) {
@@ -471,7 +486,7 @@ class ShardingManager implements IShardingManager {
   }
 
   Future<Process> _spawn(List<int> shardIds) async {
-    final spawnedProcess = await processData.spawn(shardIds, _totalShards!);
+    final spawnedProcess = await processData.spawn(shardIds, _totalShards!, port);
 
     if (options.redirectOutput) {
       spawnedProcess.stdout.transform(utf8.decoder).forEach(stdout.write);
