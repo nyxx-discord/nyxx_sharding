@@ -409,7 +409,7 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
     while (true) {
       http.Response response = await http.get(
-        Uri.parse('https://discord.com/api/users/@me/guilds${after == null ? '' : '&after=$after'}'),
+        Uri.parse('https://discord.com/api/users/@me/guilds${after == null ? '' : '?after=$after'}'),
         headers: {
           'Authorization': 'Bot $token',
         },
