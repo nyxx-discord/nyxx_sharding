@@ -405,7 +405,7 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
     int total = 0;
 
-    _logger.fine('Fetching guilds...');
+    _logger.info('Fetching guilds...');
 
     while (true) {
       http.Response response = await http.get(
@@ -432,16 +432,16 @@ class ShardingManager with ShardingServer implements IShardingManager {
         break;
       }
 
-      if (response.headers['X-RateLimit-Remaining'] == '0') {
-        int resetTimestamp = num.parse(response.headers['X-RateLimit-Reset']!).ceil();
+      if (int.parse(response.headers['x-ratelimit-remaining']!) < 2) {
+        int resetTimestamp = num.parse(response.headers['x-ratelimit-reset']!).ceil();
 
-        DateTime resetTime = DateTime.fromMillisecondsSinceEpoch(resetTimestamp);
+        DateTime resetTime = DateTime.fromMillisecondsSinceEpoch(resetTimestamp * 1000);
 
         await Future.delayed(resetTime.difference(DateTime.now()));
       }
     }
 
-    _logger.fine('Found a total of $total guilds');
+    _logger.info('Found a total of $total guilds');
 
     return total;
   }
