@@ -1,6 +1,6 @@
 name: nyxx_sharding
 description: External sharding for nyxx.
-version: 2.0.0-dev.0
+version: 2.0.0-dev.0.2
 homepage: https://github.com/nyxx-discord/nyxx_sharding
 repository: https://github.com/nyxx-discord/nyxx_sharding
 documentation: https://nyxx.l7ssha.xyz
