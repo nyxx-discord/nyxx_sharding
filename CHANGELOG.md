@@ -1,4 +1,12 @@
-## 2.0.0
+## 2.0.0-dev.0.2
+__Bug fixes__:
+- Fixed an issue with ratelimiting when fetching guild counts.
+
+## 2.0.0-dev.0.1
+__Bug fixes__:
+- Fixed an issue with query parameter formatting preventing guild counts from being fetched.
+
+## 2.0.0-dev.0
 __Breaking changes__:
 - Added a new `port` parameter to `ProcessData.spawn`.
 
@@ -10,6 +18,6 @@ __New features__:
 __Bug fixes__:
 - Spawned processes no longer prevent the parent from exiting.
 
-## 1.0.0
+## 0.1.0.0
 
 - Initial version.
