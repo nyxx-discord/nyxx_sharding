@@ -18,6 +18,6 @@ __New features__:
 __Bug fixes__:
 - Spawned processes no longer prevent the parent from exiting.
 
-## 0.1.0.0
+## 1.0.0
 
 - Initial version.
