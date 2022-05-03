@@ -401,6 +401,13 @@ class ShardingManager with ShardingServer implements IShardingManager {
       throw ShardingError('Cannot get guild count when token is null');
     }
 
+    if (options.useImpreciseGuildCount) {
+      _logger.info('Fetching guilds using approximation...');
+
+      // Discord seems to recommend 1000 guilds per shard
+      return await _getRecommendedShards() * 1000;
+    }
+
     String? after;
 
     int total = 0;
