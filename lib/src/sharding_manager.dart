@@ -225,15 +225,15 @@ class ShardingManager with ShardingServer implements IShardingManager {
         _providedTotalShards = totalShards,
         _maxGuildsPerShard = maxGuildsPerShard,
         _maxGuildsPerProcess = maxGuildsPerProcess {
-    if (_totalShards != null && _totalShards! < 1) {
+    if (_providedTotalShards != null && _providedTotalShards! < 1) {
       throw ShardingError('Invalid shard count specified: total shard count cannot be below 1');
     }
 
-    if (_numProcesses != null && _numProcesses! < 1) {
+    if (_providedNumProcesses != null && _providedNumProcesses! < 1) {
       throw ShardingError('Invalid process count: total process count cannot be below 1');
     }
 
-    if (_shardsPerProcess != null && _shardsPerProcess! < 1) {
+    if (_providedShardsPerProcess != null && _providedShardsPerProcess! < 1) {
       throw ShardingError('Invalid shard per process count specified: total shards per process cannot be less than 1');
     }
 
@@ -529,7 +529,7 @@ class ShardingManager with ShardingServer implements IShardingManager {
   }
 
   Future<Process> _spawn(List<int> shardIds) async {
-    final spawnedProcess = await processData.spawn(shardIds, _totalShards!, port);
+    final spawnedProcess = await processData.spawn(shardIds, totalShards!, port);
 
     if (options.redirectOutput) {
       spawnedProcess.stdout.transform(utf8.decoder).forEach(stdout.write);
