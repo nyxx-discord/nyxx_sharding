@@ -405,7 +405,7 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
     int total = 0;
 
-    _logger.info('Fetching guilds...');
+    _logger.info('Fetching guilds... (this may take a while)');
 
     while (true) {
       http.Response response = await http.get(
@@ -421,21 +421,24 @@ class ShardingManager with ShardingServer implements IShardingManager {
 
       List<Map<String, dynamic>> data = (jsonDecode(response.body) as List<dynamic>).cast<Map<String, dynamic>>();
 
+      // Query guilds until we reach the final page, which will be empty
+      if (data.isEmpty) {
+        _logger.finer('Got empty response from guilds endpoint, assuming all guilds have been fetched.');
+        break;
+      }
+
       after = data.last['id'] as String;
 
       total += data.length;
 
       _logger.finer('Got response from guilds endpoint with ${data.length} guilds');
 
-      // Endpoint returns 200 guilds per page; if we get less than 200 we have reached the end of the guild list
-      if (data.length < 200) {
-        break;
-      }
-
       if (int.parse(response.headers['x-ratelimit-remaining']!) < 2) {
         int resetTimestamp = num.parse(response.headers['x-ratelimit-reset']!).ceil();
 
         DateTime resetTime = DateTime.fromMillisecondsSinceEpoch(resetTimestamp * 1000);
+
+        _logger.finer('Waiting until $resetTime to avoid rate limits on guilds endpoint');
 
         await Future.delayed(resetTime.difference(DateTime.now()));
       }
