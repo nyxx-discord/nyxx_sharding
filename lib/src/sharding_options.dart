@@ -25,11 +25,17 @@ class ShardingOptions {
   /// The interval at which to check if processes should be restarted, if [autoScale] is `true`.
   final Duration autoScaleInterval;
 
+  /// Whether to get the guild count using an approximation rather than an exact number.
+  ///
+  /// This will be faster than fetching the exact count.
+  final bool useImpreciseGuildCount;
+
   const ShardingOptions({
     this.redirectOutput = true,
     this.timeoutSpawn = true,
     this.respawnProcesses = true,
     this.autoScale = false,
     this.autoScaleInterval = const Duration(minutes: 15),
+    this.useImpreciseGuildCount = false,
   });
 }
