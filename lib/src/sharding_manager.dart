@@ -495,9 +495,9 @@ class ShardingManager with ShardingServer implements IShardingManager {
     if (options.timeoutSpawn) {
       int maxConcurrency = await _getMaxConcurrency();
       return Duration(milliseconds: (5 * 1000) ~/ maxConcurrency + 1000);
-    } else {
-      return Duration.zero;
     }
+
+    return Duration.zero;
   }
 
   Future<int> _getMaxConcurrency() async {
