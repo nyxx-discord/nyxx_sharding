@@ -1,3 +1,10 @@
+## 2.0.0-dev.1
+__New features__
+- Added an `autoScale` option that will automatically scale youru processes & shards according to youur bot's size in realtime.
+
+__Bug fixes__
+- Fixed fetching guild count being inconsistent
+
 ## 2.0.0-dev.0.2
 __Bug fixes__:
 - Fixed an issue with ratelimiting when fetching guild counts.

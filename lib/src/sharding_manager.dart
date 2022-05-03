@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:isolate';
@@ -177,11 +178,11 @@ class ShardingManager with ShardingServer implements IShardingManager {
   final ProcessData processData;
 
   @override
-  int? get shardsPerProcess => _shardsPerProcess;
+  int? get shardsPerProcess => _providedShardsPerProcess ?? _shardsPerProcess;
   @override
-  int? get numProcesses => _numProcesses;
+  int? get numProcesses => _providedNumProcesses ?? _numProcesses;
   @override
-  int? get totalShards => _totalShards;
+  int? get totalShards => _providedTotalShards ?? _totalShards;
   @override
   int? get maxGuildsPerShard => _maxGuildsPerShard;
   @override
@@ -192,6 +193,10 @@ class ShardingManager with ShardingServer implements IShardingManager {
   int? _totalShards;
   final int? _maxGuildsPerShard;
   final int? _maxGuildsPerProcess;
+
+  final int? _providedShardsPerProcess;
+  final int? _providedNumProcesses;
+  final int? _providedTotalShards;
 
   @override
   final String? token;
@@ -215,20 +220,20 @@ class ShardingManager with ShardingServer implements IShardingManager {
     int? maxGuildsPerProcess,
     this.token,
     this.options = const ShardingOptions(),
-  })  : _shardsPerProcess = shardsPerProcess,
-        _numProcesses = numProcesses,
-        _totalShards = totalShards,
+  })  : _providedShardsPerProcess = shardsPerProcess,
+        _providedNumProcesses = numProcesses,
+        _providedTotalShards = totalShards,
         _maxGuildsPerShard = maxGuildsPerShard,
         _maxGuildsPerProcess = maxGuildsPerProcess {
-    if (_totalShards != null && _totalShards! < 1) {
+    if (_providedTotalShards != null && _providedTotalShards! < 1) {
       throw ShardingError('Invalid shard count specified: total shard count cannot be below 1');
     }
 
-    if (_numProcesses != null && _numProcesses! < 1) {
+    if (_providedNumProcesses != null && _providedNumProcesses! < 1) {
       throw ShardingError('Invalid process count: total process count cannot be below 1');
     }
 
-    if (_shardsPerProcess != null && _shardsPerProcess! < 1) {
+    if (_providedShardsPerProcess != null && _providedShardsPerProcess! < 1) {
       throw ShardingError('Invalid shard per process count specified: total shards per process cannot be less than 1');
     }
 
@@ -271,69 +276,73 @@ class ShardingManager with ShardingServer implements IShardingManager {
     }
 
     await _startProcesses();
+
+    if (options.autoScale) {
+      _startMonitoring();
+    }
   }
 
-  Future<void> _computeShardAndProcessCounts() async {
-    if ([totalShards, numProcesses, shardsPerProcess].where((element) => element != null).length >= 2) {
+  Future<void> _computeShardAndProcessCounts([int? existingGuildCount]) async {
+    if ([_providedTotalShards, _providedNumProcesses, _providedShardsPerProcess].where((element) => element != null).length >= 2) {
       // If two of [totalShards], [numProcesses] or [shardsPerProcess] are given, the third can be calculated with
       // this identity: totalShards = numProcesses * shardsPerProcess
-      if (totalShards != null && numProcesses != null && shardsPerProcess != null) {
+      if (_providedTotalShards != null && _providedNumProcesses != null && _providedShardsPerProcess != null) {
         // If all three are provided, check that the values respect the identity
-        if (totalShards != numProcesses! * shardsPerProcess!) {
+        if (_providedTotalShards != _providedNumProcesses! * _providedShardsPerProcess!) {
           throw ShardingError(
-            'Total shard count ($totalShards) was not equal to product of process count and shards per process ($numProcesses * $shardsPerProcess = ${numProcesses! * shardsPerProcess!})',
+            'Total shard count ($_providedTotalShards) was not equal to product of process count and shards per process ($_providedNumProcesses * $_providedShardsPerProcess = ${_providedNumProcesses! * _providedShardsPerProcess!})',
           );
         }
-      } else if (numProcesses != null && shardsPerProcess != null) {
-        _totalShards = numProcesses! * shardsPerProcess!;
-      } else if (totalShards != null && shardsPerProcess != null) {
-        _numProcesses = (totalShards! / shardsPerProcess!).ceil();
-      } else if (totalShards != null && numProcesses != null) {
-        _shardsPerProcess = (totalShards! / numProcesses!).ceil();
+      } else if (_providedNumProcesses != null && _providedShardsPerProcess != null) {
+        _totalShards = _providedNumProcesses! * _providedShardsPerProcess!;
+      } else if (_providedTotalShards != null && _providedShardsPerProcess != null) {
+        _numProcesses = (_providedTotalShards! / _providedShardsPerProcess!).ceil();
+      } else if (_providedTotalShards != null && _providedNumProcesses != null) {
+        _shardsPerProcess = (_providedTotalShards! / _providedNumProcesses!).ceil();
       }
 
       // Warn about guild limits
-      await _warnGuildLimits();
+      await _warnGuildLimits(existingGuildCount);
     } else {
       // If less than 2 are provided, we need a token as we will need to fetch guild count or recommended shard count.
       if (token == null) {
         throw ShardingError('A token must be provided if less than two of total shards, shards per process or process count are provided');
       }
 
-      if (shardsPerProcess != null) {
+      if (_providedShardsPerProcess != null) {
         // Get [totalShards] and [numProcesses] from the guild limits if we have them
         if (maxGuildsPerShard != null || maxGuildsPerProcess != null) {
-          int guildCount = await _getGuildCount();
+          int guildCount = existingGuildCount ?? await _getGuildCount();
 
           if (maxGuildsPerShard != null) {
             _totalShards = (guildCount / maxGuildsPerShard!).ceil();
-            _numProcesses = (totalShards! / shardsPerProcess!).ceil();
+            _numProcesses = (totalShards! / _providedShardsPerProcess!).ceil();
           } else if (maxGuildsPerProcess != null) {
             _numProcesses = (guildCount / maxGuildsPerProcess!).ceil();
-            _totalShards = numProcesses! * shardsPerProcess!;
+            _totalShards = numProcesses! * _providedShardsPerProcess!;
           }
 
           await _warnGuildLimits(guildCount);
         } else {
           // If there are no guild limits, fall back to fetching the recommended shard count from Discord
           _totalShards = await _getRecommendedShards();
-          _numProcesses = (totalShards! / shardsPerProcess!).ceil();
+          _numProcesses = (totalShards! / _providedShardsPerProcess!).ceil();
         }
-      } else if (numProcesses != null) {
-        int guildCount = await _getGuildCount();
+      } else if (_providedNumProcesses != null) {
+        int guildCount = existingGuildCount ?? await _getGuildCount();
 
         // We can't use maxGuildPerProcess since we already have a number of processes
         if (maxGuildsPerShard != null) {
           _totalShards = (guildCount / maxGuildsPerShard!).ceil();
-          _shardsPerProcess = (totalShards! / numProcesses!).ceil();
+          _shardsPerProcess = (totalShards! / _providedNumProcesses!).ceil();
         } else {
           _totalShards = await _getRecommendedShards();
-          _shardsPerProcess = (totalShards! / numProcesses!).ceil();
+          _shardsPerProcess = (totalShards! / _providedNumProcesses!).ceil();
         }
 
         await _warnGuildLimits(guildCount);
       } else if (maxGuildsPerProcess != null) {
-        int guildCount = await _getGuildCount();
+        int guildCount = existingGuildCount ?? await _getGuildCount();
 
         _numProcesses = (guildCount / maxGuildsPerProcess!).ceil();
 
@@ -459,18 +468,12 @@ class ShardingManager with ShardingServer implements IShardingManager {
   Future<void> _startProcesses() async {
     _logger.info('Starting $numProcesses processes, each with $shardsPerProcess shards (for a total of $totalShards)');
 
-    List<int> shardIds = List.generate(_totalShards!, (id) => id);
+    List<int> shardIds = List.generate(totalShards!, (id) => id);
 
-    Duration individualConnectionDelay;
-    if (options.timeoutSpawn) {
-      int maxConcurrency = await _getMaxConcurrency();
-      individualConnectionDelay = Duration(milliseconds: (5 * 1000) ~/ maxConcurrency + 1000);
-    } else {
-      individualConnectionDelay = Duration.zero;
-    }
+    Duration individualConnectionDelay = await _getConnectionDelay();
 
-    for (int totalSpawned = 0; totalSpawned < _totalShards!; totalSpawned += _shardsPerProcess!) {
-      int lastIndex = totalSpawned + _shardsPerProcess!;
+    for (int totalSpawned = 0; totalSpawned < totalShards!; totalSpawned += shardsPerProcess!) {
+      int lastIndex = totalSpawned + shardsPerProcess!;
 
       if (lastIndex > shardIds.length) {
         lastIndex = shardIds.length;
@@ -485,7 +488,16 @@ class ShardingManager with ShardingServer implements IShardingManager {
       }
     }
 
-    _logger.info('Successfully started ${processes.length} processes, totalling $_totalShards shards');
+    _logger.info('Successfully started ${processes.length} processes, totalling $totalShards shards');
+  }
+
+  Future<Duration> _getConnectionDelay() async {
+    if (options.timeoutSpawn) {
+      int maxConcurrency = await _getMaxConcurrency();
+      return Duration(milliseconds: (5 * 1000) ~/ maxConcurrency + 1000);
+    }
+
+    return Duration.zero;
   }
 
   Future<int> _getMaxConcurrency() async {
@@ -517,7 +529,7 @@ class ShardingManager with ShardingServer implements IShardingManager {
   }
 
   Future<Process> _spawn(List<int> shardIds) async {
-    final spawnedProcess = await processData.spawn(shardIds, _totalShards!, port);
+    final spawnedProcess = await processData.spawn(shardIds, totalShards!, port);
 
     if (options.redirectOutput) {
       spawnedProcess.stdout.transform(utf8.decoder).forEach(stdout.write);
@@ -545,6 +557,90 @@ class ShardingManager with ShardingServer implements IShardingManager {
     });
 
     return spawnedProcess;
+  }
+
+  Future<void> _startMonitoring() async {
+    _logger.info('Waiting for all processes to connect to manager...');
+
+    while (connections.length != numProcesses) {
+      Completer<void> nextConnection = Completer();
+
+      StreamSubscription<WebSocket> nextConnectionSubscription = onConnection.listen((event) => nextConnection.complete());
+
+      await nextConnection.future;
+      nextConnectionSubscription.cancel();
+    }
+
+    _logger.info('Starting to monitor processes');
+
+    while (!_exiting) {
+      await Future.delayed(options.autoScaleInterval);
+      await _updateProcesses();
+    }
+  }
+
+  Future<void> _updateProcesses() async {
+    int oldShardsPerProcess = shardsPerProcess!;
+    int oldNumProcesses = numProcesses!;
+    int oldTotalShards = totalShards!;
+
+    _logger.finer('Updating processes...');
+
+    // Use the guild count obtained from the processes themselves instesad of refetching it
+    await _computeShardAndProcessCounts((await getCachedGuilds()).reduce((a, b) => a + b));
+
+    // Restart processes if needed
+    if (oldShardsPerProcess != shardsPerProcess || oldNumProcesses != numProcesses || oldTotalShards != totalShards) {
+      _logger.info('Restarting $numProcesses processes, each with $shardsPerProcess shards (for a total of $totalShards)');
+      _logger.fine('(Previously $oldNumProcesses processes, each with $oldShardsPerProcess shards (for a total of $oldTotalShards))');
+
+      // Prevent processes from restarting
+      _exiting = true;
+
+      List<int> shardIds = List.generate(totalShards!, (i) => i);
+
+      Duration individualConnectionDelay = await _getConnectionDelay();
+
+      List<Process> oldProcesses = List.from(processes);
+
+      for (int totalSpawned = 0; totalSpawned < totalShards!; totalSpawned += shardsPerProcess!) {
+        int lastIndex = totalSpawned + shardsPerProcess!;
+
+        if (lastIndex > shardIds.length) {
+          lastIndex = shardIds.length;
+        }
+
+        // Ensure all processes handling shards we are about to spawn are dead so we don't get single events twice
+        double progress = lastIndex / totalShards!;
+        int progressIndex = (progress * oldProcesses.length).ceil();
+        for (int i = 0; i < progressIndex; i++) {
+          if (oldProcesses[i].kill(ProcessSignal.sigterm)) {
+            _logger.fine('Killing old process #${i + 1} of ${oldProcesses.length}...');
+            await oldProcesses[i].exitCode.timeout(
+              Duration(minutes: 1),
+              onTimeout: () {
+                _logger.warning('Forcefully killing old process #${i + 1} of ${oldProcesses.length} as it did not shutdown gracefully'
+                    ' (did you add CliIntegration to your client?)');
+
+                oldProcesses[i].kill(ProcessSignal.sigkill);
+                return oldProcesses[i].exitCode;
+              },
+            );
+            _logger.info('Killed old process #${i + 1} of ${oldProcesses.length}');
+          }
+        }
+
+        await _spawn(shardIds.sublist(totalSpawned, lastIndex));
+
+        _logger.fine('Spawned new process with shards ${shardIds.sublist(totalSpawned, lastIndex)}');
+
+        if (lastIndex != shardIds.length) {
+          await Future.delayed(individualConnectionDelay * (lastIndex - totalSpawned));
+        }
+      }
+
+      _exiting = false;
+    }
   }
 
   @override

@@ -23,6 +23,9 @@ mixin ShardingServer implements IShardingManager, IDataProvider {
 
   final Logger _logger = Logger('Sharding Server');
 
+  final StreamController<WebSocket> connectionsController = StreamController.broadcast();
+  Stream<WebSocket> get onConnection => connectionsController.stream;
+
   Future<void> startServer() async {
     _logger.fine('Starting server');
 
@@ -34,6 +37,7 @@ mixin ShardingServer implements IShardingManager, IDataProvider {
       _logger.finer('Got connection to server');
 
       connections.add(socket);
+      connectionsController.add(socket);
 
       StreamSubscription<String> subscription = socket.cast<String>().listen((event) => handleEvent(event, socket));
 
