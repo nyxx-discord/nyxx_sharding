@@ -17,7 +17,7 @@ void main() async {
     options: getOptions(),
   );
 
-  // Register the sharding plugin to allow other processes to query this process about data like memory usage anc cache sizes.
+  // Register the sharding plugin to allow other processes to query this process about data like memory usage and cache sizes.
   // The plugin is also how you can request that data, so you might want to extract it to a variable.
   client.registerPlugin(ShardingPlugin());
 
