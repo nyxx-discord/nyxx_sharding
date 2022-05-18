@@ -15,9 +15,27 @@ class ShardingOptions {
   /// Generally you will not want to disable this; this option should be used for testing only.
   final bool timeoutSpawn;
 
+  /// Whether to automatically restart processes when they grow beyond a certain threshold with updated shard and process counts.
+  ///
+  /// This setting requires the child processes to add [IShardingPlugin] to their respective clients.
+  ///
+  /// This setting can cause downtime while the processes restart, so it is disabled by default.
+  final bool autoScale;
+
+  /// The interval at which to check if processes should be restarted, if [autoScale] is `true`.
+  final Duration autoScaleInterval;
+
+  /// Whether to get the guild count using an approximation rather than an exact number.
+  ///
+  /// This will be faster than fetching the exact count.
+  final bool useImpreciseGuildCount;
+
   const ShardingOptions({
     this.redirectOutput = true,
     this.timeoutSpawn = true,
     this.respawnProcesses = true,
+    this.autoScale = false,
+    this.autoScaleInterval = const Duration(minutes: 15),
+    this.useImpreciseGuildCount = false,
   });
 }
