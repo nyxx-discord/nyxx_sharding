@@ -266,6 +266,10 @@ class ShardingManager with ShardingServer implements IShardingManager {
     }
 
     for (final signal in [ProcessSignal.sigint, ProcessSignal.sigterm]) {
+      if (Platform.isWindows && signal == ProcessSignal.sigterm) {
+        break;
+      }
+
       signal.watch().listen((event) async {
         _logger.info('Exiting...');
 

@@ -1,3 +1,8 @@
+## 2.0.1
+__Bug fixes__:
+
+- Fix crash on Windows
+
 ## 2.0.0
 __New features__:
 - Added a CLI for easier usage of nyxx_sharding. Run `dart pub global activate nyxx_sharding` to enable the CLI and then `nyxx-sharding --help` for more.
